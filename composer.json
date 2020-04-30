@@ -1,0 +1,19 @@
+{
+    "name": "yoh/medoo-orm",
+    "type": "library",
+    "description": "ORM based on catfan/medoo : retrieve data from database + hydrate Model + preload relations",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.1",
+        "catfan/medoo": ">=1.7"
+    },
+    "require-dev": {
+        "symfony/var-dumper": "^4.2"
+    },
+    "minimum-stability": "stable",
+    "autoload": {
+        "psr-4": {
+            "MedooOrm\\": "src/"
+        }
+    }
+}
