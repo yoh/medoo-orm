@@ -80,6 +80,7 @@ abstract class Relation
                 $element[$relation][] = &$related;
             }
 
+            $collection->elements = array_values($elementsByIds);
             $collection->relations[$relation] = $relateds;
         }
     }
@@ -132,7 +133,7 @@ class ManyToManyRelation extends Relation
                 return $join[$this->joinKey] == $element[$this->foreingKey];
             });
 
-            $collection->elements[$k][$relation] ??= [];
+            $collection->elements[$k][$relation] = $collection->elements[$k][$relation] ?? [];
             foreach ($joinsForElement as $join) {
                 $related = &$relatedsByJoinKey1[$join[$this->joinKey1]];
                 $collection->elements[$k][$relation][$join[$this->indexedBy] ?? null] = &$related;

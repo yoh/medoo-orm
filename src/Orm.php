@@ -101,6 +101,8 @@ class Orm
             return $this->getConnection($name)->log();
         }
 
-        return array_map(fn($conn) => $conn->log(), $this->connections);
+        return array_map(function ($conn) {
+            return $conn->log();
+        }, $this->connections);
     }
 }

@@ -92,7 +92,7 @@ class Collection
     {
         $groups = [];
         foreach ($items as $item) {
-            $groups[$item[$key]] ??= [];
+            $groups[$item[$key]] = $groups[$item[$key]] ?? [];
             $groups[$item[$key]][] = $item;
         }
 
