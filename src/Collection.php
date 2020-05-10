@@ -16,9 +16,9 @@ class Collection
     public function __construct(string $table, array $elements, Orm $orm)
     {
         $this->table = $table;
-        $this->elements = $elements;
+        $this->elements = array_filter($elements);
         $this->relations = [];
-        $this->orm = &$orm;
+        $this->orm = $orm;
     }
 
     public function toArray(): array
@@ -66,12 +66,11 @@ class Collection
         }
 
         $schema = $this->orm->getSchemaForTable($this->table);
-        $definition = $schema['relations'][$relation] ?? false;
-        if (!$definition) {
+        $relDefinition = $schema['relations'][$relation] ?? false;
+        if (!$relDefinition) {
             throw new \DomainException("The relation '{$this->table} -> {$relation}' in not defined in the schema");
         }
-
-        $definition->execute($relation, $this, $where);
+        $relDefinition->execute($relation, $this, $where);
 
         return $this;
     }

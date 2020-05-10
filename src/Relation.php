@@ -59,7 +59,7 @@ abstract class Relation
     public function execute(string $relation, Collection $collection, array $where = [])
     {
         $relateds = $collection->orm->select($this->table, $where + $this->where + [
-            "{$this->foreingKey}[IN]" => Collection::pluck($collection->elements, $this->nativeKey)
+            "{$this->foreingKey}" => Collection::pluck($collection->elements, $this->nativeKey)
         ]);
 
         if ($this instanceof OneToOneRelation || $this instanceof ManyToOneRelation) {
