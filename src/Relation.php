@@ -121,11 +121,16 @@ class ManyToManyRelation extends Relation
     public function execute(string $relation, Collection $collection, array $where = [])
     {
         $joins = $collection->orm->getConnectionForTable($this->joinTable)->select($this->joinTable, '*', [
-            "{$this->joinKey}[IN]" => Collection::pluck($collection->elements, $this->foreingKey)
+            "{$this->joinKey}" => Collection::pluck($collection->elements, $this->foreingKey)
         ]);
-        $relateds = $collection->orm->select($this->table, $where + $this->where + [
-            "{$this->nativeKey}[IN]" => Collection::pluck($joins, $this->joinKey1)
-        ]);
+
+        if (!empty($joins)) {
+            $relateds = $collection->orm->select($this->table, $where + $this->where + [
+                "{$this->nativeKey}" => Collection::pluck($joins, $this->joinKey1)
+            ]);
+        } else {
+            $relateds = new Collection($this->table, [], $collection->orm);
+        }
 
         $relatedsByJoinKey1 = Collection::indexBy($relateds->elements, $this->nativeKey);
         foreach ($collection->elements as $k => $element) {

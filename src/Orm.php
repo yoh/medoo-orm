@@ -77,6 +77,16 @@ class Orm
         return $pk;
     }
 
+    public function getOrderByForTable(string $table): ?array
+    {
+        $orderBy = null;
+        if ($schema = $this->getSchemaForTable($table)) {
+            $orderBy = $schema['order_by'] ?? $orderBy;
+        }
+
+        return $orderBy;
+    }
+
 
     public function repo(string $table): AbstractRepository
     {
@@ -89,14 +99,18 @@ class Orm
 
     public function select(string $table, array $where = []): Collection
     {
-        $items = $this->getConnectionForTable($table)->select($table, '*', $where);
+        $items = $this->getConnectionForTable($table)->select($table, '*', $where + [
+            'ORDER' => $this->getOrderByForTable($table)
+        ]);
 
         return new Collection($table, $items, $this);
     }
 
     public function get(string $table, array $where = []): Item
     {
-        $item = $this->getConnectionForTable($table)->get($table, '*', $where);
+        $item = $this->getConnectionForTable($table)->get($table, '*', $where + [
+            'ORDER' => $this->getOrderByForTable($table)
+        ]);
 
         return new Item($table, [$item], $this);
     }
@@ -137,13 +151,16 @@ class Orm
     public function insertEntity($entity)
     {
         $table =  $this->getTableForEntity($entity);
-        $pk = $this->getPkForTable($table);
+        // $pk = $this->getPkForTable($table);
 
         $relations = $this->schema[$table]['relations'] ?? [];
-        $data = array_diff_key((array) $entity, $relations);
+        $data = $this->transformData(
+            array_diff_key((array) $entity, $relations, ['id' => null])
+        );
 
         $id = $this->insert($table, $data);
-        $entity->{$pk} = $id;
+        // $entity->{$pk} = $id;
+        $entity->id = (int) $id;
 
         return $entity;
     }
@@ -160,8 +177,51 @@ class Orm
         $pk = $this->getPkForTable($table);
 
         $relations = $this->schema[$table]['relations'] ?? [];
-        $data = array_diff_key((array) $entity, $relations);
-        $this->update($table, $data, [$pk => $entity->{$pk}]);
+        $data = $this->transformData(
+            array_diff_key((array) $entity, $relations, ['id' => null])
+        );
+        // $this->update($table, $data, [$pk => $entity->{$pk}]);
+
+
+        $this->update($table, $data, [$pk => $entity->id]);
+
+        return $entity;
+    }
+
+    private function transformData(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if ($value instanceof \DateTime) {
+                $data[$key] = $value->format('c');
+            } else {
+                $data[$key] = $value;
+            }
+        }
+
+        return $data;
+    }
+
+    public function saveEntity($entity)
+    {
+        if ($entity->id === null) {
+            return $this->insertEntity($entity);
+        }
+
+        return $this->updateEntity($entity);
+    }
+
+    public function delete(string $table, array $where)
+    {
+        $connection = $this->getConnectionForTable($table);
+        $connection->delete($table, $where);
+    }
+
+    public function deleteEntity($entity)
+    {
+        $table =  $this->getTableForEntity($entity);
+        $pk = $this->getPkForTable($table);
+
+        $this->delete($table, [$pk => $entity->id]);
 
         return $entity;
     }
