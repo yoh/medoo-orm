@@ -148,6 +148,13 @@ class Orm
         return $connection->id();
     }
 
+    public function bulkInsert(string $table, array $data)
+    {
+        $connection = $this->getConnectionForTable($table);
+
+        return $connection->insert($table, $data);
+    }
+
     public function insertEntity($entity)
     {
         $table =  $this->getTableForEntity($entity);
@@ -173,7 +180,7 @@ class Orm
 
     public function updateEntity($entity)
     {
-        $table =  $this->getTableForEntity($entity);
+        $table = $this->getTableForEntity($entity);
         $pk = $this->getPkForTable($table);
 
         $relations = $this->schema[$table]['relations'] ?? [];
