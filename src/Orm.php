@@ -175,7 +175,8 @@ class Orm
     public function update(string $table, array $data, array $where)
     {
         $connection = $this->getConnectionForTable($table);
-        $connection->update($table, $data, $where);
+
+        return $connection->update($table, $data, $where);
     }
 
     public function updateEntity($entity)
