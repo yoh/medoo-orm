@@ -26,6 +26,9 @@ class Collection
         return $this->elements;
     }
 
+    /**
+     * @return Array|Object
+     */
     public function toEntity()
     {
         return $this->toEntityArray();
@@ -47,6 +50,9 @@ class Collection
         return $this->elements;
     }
 
+    /**
+     * @return Collection|Item
+     */
     public function load(string $relation, array $where = []): self
     {
         $relations = explode('.', $relation);
@@ -77,7 +83,7 @@ class Collection
 
     public static function pluck(array $items, string $key): array
     {
-        return array_unique(array_map(function($item) use ($key) {
+        return array_unique(array_map(function ($item) use ($key) {
             return is_object($item) ? $item->$key : $item[$key];
         }, $items));
     }
