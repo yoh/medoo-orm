@@ -257,4 +257,14 @@ class Orm
         $connection->pdo->rollback();
         $this->transactions[$name] = false;
     }
+
+    public function cacheGet(string $key)
+    {
+        if (!isset($this->cache[$key])) {
+            [$table, $pk] = explode('.', $key);
+            $this->cache[$key] = $this->getByPk($table, $pk)->toEntity();
+        }
+
+        return $this->cache[$key] ?? null;
+    }
 }
