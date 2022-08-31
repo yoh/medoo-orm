@@ -179,6 +179,13 @@ class Orm
         return $connection->update($table, $data, $where);
     }
 
+    public function updateByPk(string $table, array $data, int $id, array $where = [])
+    {
+        $pk = $this->getPkForTable($table);
+
+        return $this->update($table, $data, $where + [$pk => $id]);
+    }
+
     public function updateEntity($entity)
     {
         $table = $this->getTableForEntity($entity);
@@ -189,7 +196,6 @@ class Orm
             array_diff_key((array) $entity, $relations, ['id' => null])
         );
         // $this->update($table, $data, [$pk => $entity->{$pk}]);
-
 
         $this->update($table, $data, [$pk => $entity->id]);
 
