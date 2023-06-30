@@ -2,8 +2,6 @@
 
 namespace MedooOrm;
 
-use Medoo\Medoo;
-
 class Orm
 {
     // private array $config;
@@ -14,6 +12,7 @@ class Orm
     private $schema;
     private $connections;
     private $transactions;
+    private $cache;
 
     public function __construct(array $config, array $schema)
     {
@@ -21,9 +20,10 @@ class Orm
         $this->schema = $schema;
         $this->connections = [];
         $this->transactions = [];
+        $this->cache = [];
     }
 
-    public function getConnection(?string $name = 'default'): Medoo
+    public function getConnection(?string $name = 'default'): MedooWrapper
     {
         if ($conn = $this->connections[$name] ?? false) {
             return $conn;
@@ -34,13 +34,13 @@ class Orm
             throw new \DomainException("Undefined config for table '$name'");
         }
 
-        $conn = new Medoo($config);
+        $conn = new MedooWrapper($config);
         $this->connections[$name] = $conn;
 
         return $conn;
     }
 
-    public function getConnectionForTable(string $table): Medoo
+    public function getConnectionForTable(string $table): MedooWrapper
     {
         return $this->getConnection($this->schema[$table]['connection'] ?? 'default');
     }
@@ -140,8 +140,36 @@ class Orm
         }, $this->connections);
     }
 
+    public function metrics(?string $name = null, bool $merge = false): array
+    {
+        if ($name) {
+            return $this->getConnection($name)->metrics();
+        }
+
+        $metrics = array_map(function (MedooWrapper $conn) {
+            return $conn->metrics();
+        }, $this->connections);
+
+        if ($merge) {
+            $metrics = array_reduce($metrics, function ($acc, $metric) {
+                foreach ($metric as $key => $value) {
+                    $acc[$key] = ($acc[$key] ?? 0) + $value;
+                }
+
+                return $acc;
+            });
+        }
+
+        return $metrics;
+    }
+
     public function insert(string $table, array $data)
     {
+        $relations = $this->schema[$table]['relations'] ?? [];
+        $data = $this->transformData(
+            array_diff_key($data, $relations, ['id' => null])
+        );
+
         $connection = $this->getConnectionForTable($table);
         $connection->insert($table, $data);
 
@@ -150,9 +178,17 @@ class Orm
 
     public function bulkInsert(string $table, array $data)
     {
+        $transformeds = [];
+        $relations = $this->schema[$table]['relations'] ?? [];
+        foreach ($data as $item) {
+            $transformeds[] = $this->transformData(
+                array_diff_key((array) $item, $relations, ['id' => null])
+            );
+        }
+
         $connection = $this->getConnectionForTable($table);
 
-        return $connection->insert($table, $data);
+        return $connection->insert($table, $transformeds);
     }
 
     public function insertEntity($entity)
@@ -160,12 +196,12 @@ class Orm
         $table =  $this->getTableForEntity($entity);
         // $pk = $this->getPkForTable($table);
 
-        $relations = $this->schema[$table]['relations'] ?? [];
-        $data = $this->transformData(
-            array_diff_key((array) $entity, $relations, ['id' => null])
-        );
+        // $relations = $this->schema[$table]['relations'] ?? [];
+        // $data = $this->transformData(
+        //     array_diff_key((array) $entity, $relations, ['id' => null])
+        // );
 
-        $id = $this->insert($table, $data);
+        $id = $this->insert($table, (array) $entity);
         // $entity->{$pk} = $id;
         $entity->id = (int) $id;
 
@@ -175,6 +211,11 @@ class Orm
     public function update(string $table, array $data, array $where)
     {
         $connection = $this->getConnectionForTable($table);
+
+        $relations = $this->schema[$table]['relations'] ?? [];
+        $data = $this->transformData(
+            array_diff_key($data, $relations, ['id' => null])
+        );
 
         return $connection->update($table, $data, $where);
     }
@@ -191,13 +232,9 @@ class Orm
         $table = $this->getTableForEntity($entity);
         $pk = $this->getPkForTable($table);
 
-        $relations = $this->schema[$table]['relations'] ?? [];
-        $data = $this->transformData(
-            array_diff_key((array) $entity, $relations, ['id' => null])
-        );
         // $this->update($table, $data, [$pk => $entity->{$pk}]);
 
-        $this->update($table, $data, [$pk => $entity->id]);
+        $this->update($table, (array) $entity, [$pk => $entity->id]);
 
         return $entity;
     }

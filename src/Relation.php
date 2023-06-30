@@ -86,9 +86,15 @@ abstract class Relation
     }
 }
 
-class OneToOneRelation extends Relation{}
-class OneToManyRelation extends Relation{}
-class ManyToOneRelation extends Relation{}
+class OneToOneRelation extends Relation
+{
+}
+class OneToManyRelation extends Relation
+{
+}
+class ManyToOneRelation extends Relation
+{
+}
 class ManyToManyRelation extends Relation
 {
     // protected string $joinKey1;
@@ -134,7 +140,7 @@ class ManyToManyRelation extends Relation
 
         $relatedsByJoinKey1 = Collection::indexBy($relateds->elements, $this->nativeKey);
         foreach ($collection->elements as $k => $element) {
-            $joinsForElement = array_filter($joins, function(array $join) use ($element){
+            $joinsForElement = array_filter($joins, function (array $join) use ($element) {
                 return $join[$this->joinKey] == $element[$this->foreingKey];
             });
 
