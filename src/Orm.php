@@ -13,6 +13,9 @@ class Orm
     private $connections;
     private $transactions;
     private $cache;
+    private $autoSnapshot;
+    private $snapshots;
+    private $auditLogger;
 
     public function __construct(array $config, array $schema)
     {
@@ -21,6 +24,9 @@ class Orm
         $this->connections = [];
         $this->transactions = [];
         $this->cache = [];
+        $this->autoSnapshot = false;
+        $this->snapshots = [];
+        $this->auditLogger = new AuditLogger;
     }
 
     public function getConnection(?string $name = 'default'): MedooWrapper
@@ -55,16 +61,35 @@ class Orm
         throw new \DomainException("Undefined schema for table '$table'");
     }
 
+    public function isTableAuditLogged(string $table): bool
+    {
+        return $this->schema[$table]['audit_log'] ??
+            $this->schema['*']['audit_log'] ??
+            false;
+    }
+
     public function getTableForEntity($entity): string
     {
-        $fcqn = get_class($entity);
+        return $this->getTableForEntityFqcn(get_class($entity));
+    }
+
+    public function getTableForEntityFqcn(string $fqcn): string
+    {
         foreach ($this->schema as $table => $schema) {
-            if ($schema['entity'] === $fcqn) {
+            if (
+                $table !== '*' &&
+                $schema['entity'] === $fqcn
+            ) {
                 return $table;
             }
         }
 
-        throw new \DomainException("Undefined table for entity '{$fcqn}'");
+        throw new \DomainException("Undefined table for entity '{$fqcn}'");
+    }
+
+    public function getEntityForTable(string $table): string
+    {
+        return $this->getSchemaForTable($table)['entity'] ?? null;
     }
 
     public function getPkForTable(string $table): string
@@ -165,25 +190,23 @@ class Orm
 
     public function insert(string $table, array $data)
     {
-        $relations = $this->schema[$table]['relations'] ?? [];
-        $data = $this->transformData(
-            array_diff_key($data, $relations, ['id' => null])
-        );
-
+        $data = $this->transformData($table, $data);
         $connection = $this->getConnectionForTable($table);
         $connection->insert($table, $data);
+        $id = $connection->id();
 
-        return $connection->id();
+        if ($this->isTableAuditLogged($table)) {
+            $this->auditLogger->addInsertLog($table, $id, $data);
+        }
+
+        return $id;
     }
 
     public function bulkInsert(string $table, array $data)
     {
         $transformeds = [];
-        $relations = $this->schema[$table]['relations'] ?? [];
         foreach ($data as $item) {
-            $transformeds[] = $this->transformData(
-                array_diff_key((array) $item, $relations, ['id' => null])
-            );
+            $transformeds[] = $this->transformData($table, (array) $item);
         }
 
         $connection = $this->getConnectionForTable($table);
@@ -194,28 +217,21 @@ class Orm
     public function insertEntity($entity)
     {
         $table =  $this->getTableForEntity($entity);
-        // $pk = $this->getPkForTable($table);
 
-        // $relations = $this->schema[$table]['relations'] ?? [];
-        // $data = $this->transformData(
-        //     array_diff_key((array) $entity, $relations, ['id' => null])
-        // );
-
-        $id = $this->insert($table, (array) $entity);
-        // $entity->{$pk} = $id;
+        $data = $this->transformData($table, (array) $entity);
+        $id = $this->insert($table, $data);
         $entity->id = (int) $id;
 
         return $entity;
     }
 
-    public function update(string $table, array $data, array $where)
+    public function update(string $table, array $data, array $where, bool $alreadyTransformed = false)
     {
         $connection = $this->getConnectionForTable($table);
 
-        $relations = $this->schema[$table]['relations'] ?? [];
-        $data = $this->transformData(
-            array_diff_key($data, $relations, ['id' => null])
-        );
+        if (!$alreadyTransformed) {
+            $data = $this->transformData($table, $data);
+        }
 
         return $connection->update($table, $data, $where);
     }
@@ -223,27 +239,68 @@ class Orm
     public function updateByPk(string $table, array $data, int $id, array $where = [])
     {
         $pk = $this->getPkForTable($table);
+        $data = $this->transformData($table, $data);
 
-        return $this->update($table, $data, $where + [$pk => $id]);
+        // get or take entity snapshot if needed
+        $snapshot = $this->getSnapshot($table, $id);
+        if (!$snapshot) {
+            $entity = $this->getByPk($table, $id)->toEntity();
+            $this->takeEntitySnapshot($entity);
+            $snapshot = $this->getSnapshot($table, $id);
+        }
+
+        // use snapshot to get diffs
+        if ($snapshot) {
+            $diffs = [];
+            foreach ($data as $key => $value) {
+                if (!array_key_exists($key, $snapshot) || $snapshot[$key] !== $value) {
+                    $diffs[$key] = $value;
+                }
+            }
+            $data = $diffs;
+        }
+
+        // save data or diffs
+        $result = null;
+        if (count($data)) {
+            $result = $this->update($table, $data, $where + [$pk => $id], true);
+            if ($this->isTableAuditLogged($table)) {
+                $this->auditLogger->addUpdateLog($table, $id, $data);
+            }
+
+            if ($snapshot) {
+                $this->snapshots["$table#{$id}#current"] = array_merge($snapshot, $data);
+            }
+        }
+
+        return $result;
     }
 
     public function updateEntity($entity)
     {
         $table = $this->getTableForEntity($entity);
-        $pk = $this->getPkForTable($table);
-
-        // $this->update($table, $data, [$pk => $entity->{$pk}]);
-
-        $this->update($table, (array) $entity, [$pk => $entity->id]);
+        $this->updateByPk($table, (array) $entity, $entity->id);
 
         return $entity;
     }
 
-    private function transformData(array $data): array
+    private function transformData(string $table, array $data): array
     {
+        $relations = $this->schema[$table]['relations'] ?? [];
+        $data = array_diff_key($data, $relations, ['id' => null]);
+
+        // custom data transformer
+        $dataTransformer = $this->schema[$table]['data_transformer'] ?? null;
+        if ($dataTransformer) {
+            $data = $dataTransformer($data) + $data;
+        }
+
+        // default data transformer
         foreach ($data as $key => $value) {
             if ($value instanceof \DateTime) {
                 $data[$key] = $value->format('c');
+            } else if (!is_null($value) && !is_scalar($value)) {
+                $data[$key] = json_encode($value);
             } else {
                 $data[$key] = $value;
             }
@@ -273,6 +330,9 @@ class Orm
         $pk = $this->getPkForTable($table);
 
         $this->delete($table, [$pk => $entity->id]);
+        if ($this->isTableAuditLogged($table)) {
+            $this->auditLogger->addDeleteLog($table, $entity->id, (array) $entity);
+        }
 
         return $entity;
     }
@@ -309,5 +369,82 @@ class Orm
         }
 
         return $this->cache[$key] ?? null;
+    }
+
+    public function setAutoSnapshot(bool $autoSnapshot): void
+    {
+        $this->autoSnapshot = $autoSnapshot;
+    }
+
+    public function isAutoSnapshot(): bool
+    {
+        return $this->autoSnapshot;
+    }
+
+    public function takeEntitySnapshot($entity): void
+    {
+        $table = $this->getTableForEntity($entity);
+        $data = $this->transformData($table, (array) $entity);
+
+        $this->snapshots["$table#{$entity->id}"] = $data;
+    }
+
+    public function getSnapshots(): array
+    {
+        return $this->snapshots;
+    }
+
+    public function getSnapshot(string $table, $id, bool $withCurrent = true): ?array
+    {
+        $key = "$table#$id";
+
+        $current = null;
+        if ($withCurrent) {
+            $current = $this->snapshots["$key#current"] ?? null;
+        }
+
+        return
+            $current ??
+            $this->snapshots[$key] ??
+            null;
+    }
+
+    public function getEntitySnapshot($entity, bool $withCurrent = true): ?array
+    {
+        $table = $this->getTableForEntity($entity);
+
+        return $this->getSnapshot($table, $entity->id, $withCurrent);
+    }
+
+    public function getAuditLogger(): AuditLogger
+    {
+        return $this->auditLogger;
+    }
+
+    public function getAuditLogs(): array
+    {
+        $logs = $this->auditLogger->getMergedLogs();
+        foreach ($logs as $key => $log) {
+            $logs[$key] = $this->computeAuditLog($log);
+        }
+
+        return $logs;
+    }
+
+    private function computeAuditLog(array $log): array
+    {
+        $table = $log['table'];
+        $id = $log['id'];
+        $log['entity'] = $this->getEntityForTable($table);
+
+        $snapshot = $this->snapshots["{$table}#{$id}"] ?? null;
+        foreach ($log[AuditLogger::TYPE_UPDATE] as $prop => $newValue) {
+            $log[AuditLogger::TYPE_UPDATE][$prop] = [
+                $snapshot[$prop] ?? null,
+                $newValue
+            ];
+        }
+
+        return $log;
     }
 }

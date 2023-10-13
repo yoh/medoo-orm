@@ -42,8 +42,17 @@ class Collection
 
         $schema = $this->orm->getSchemaForTable($this->table);
         if (isset($schema['entity'])) {
+            $isAutoSnapshot = $this->orm->isAutoSnapshot();
+
             foreach ($this->elements as $key => $element) {
-                $this->elements[$key] = $schema['entity']::fromArray($element);
+                $entity = $schema['entity']::fromArray($element);
+
+                // auto entity snapshot
+                if ($isAutoSnapshot && !$this->orm->getSnapshot($this->table, $entity->id, false)) {
+                    $this->orm->takeEntitySnapshot($entity);
+                }
+
+                $this->elements[$key] = $entity;
             }
         }
 
