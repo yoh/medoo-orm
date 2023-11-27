@@ -2,6 +2,8 @@
 
 namespace MedooOrm;
 
+use Medoo\Raw;
+
 class Orm
 {
     // private array $config;
@@ -299,6 +301,8 @@ class Orm
         foreach ($data as $key => $value) {
             if ($value instanceof \DateTime) {
                 $data[$key] = $value->format('c');
+            } else if ($value instanceof Raw) {
+                $data[$key] = $value;
             } else if (!is_null($value) && !is_scalar($value)) {
                 $data[$key] = json_encode($value);
             } else {
@@ -331,7 +335,8 @@ class Orm
 
         $this->delete($table, [$pk => $entity->id]);
         if ($this->isTableAuditLogged($table)) {
-            $this->auditLogger->addDeleteLog($table, $entity->id, (array) $entity);
+            $data = $this->transformData($table, (array) $entity);
+            $this->auditLogger->addDeleteLog($table, $entity->id, $data);
         }
 
         return $entity;
