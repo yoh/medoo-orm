@@ -187,7 +187,7 @@ class Orm
             });
         }
 
-        return $metrics;
+        return (array) $metrics;
     }
 
     public function insert(string $table, array $data)
