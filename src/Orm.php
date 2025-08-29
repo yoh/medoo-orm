@@ -89,7 +89,7 @@ class Orm
         throw new \DomainException("Undefined table for entity '{$fqcn}'");
     }
 
-    public function getEntityForTable(string $table): string
+    public function getEntityForTable(string $table): ?string
     {
         return $this->getSchemaForTable($table)['entity'] ?? null;
     }
