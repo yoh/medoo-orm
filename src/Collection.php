@@ -100,9 +100,11 @@ class Collection
     public static function indexBy(array $items, string $key): array
     {
         $byKeys = [];
-        foreach ($items as $item) {
-            $itemKey = $item[$key];
-            $byKeys[$itemKey] = $byKeys[$itemKey] ?? $item;
+        foreach ($items as &$item) {
+            $itemKey = is_object($item) ? $item->$key : $item[$key];
+            if (!isset($byKeys[$itemKey])) {
+                $byKeys[$itemKey] = &$item;
+            }
         }
 
         return $byKeys;
