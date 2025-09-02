@@ -99,7 +99,13 @@ class Collection
 
     public static function indexBy(array $items, string $key): array
     {
-        return array_combine(self::pluck($items, $key), $items);
+        $byKeys = [];
+        foreach ($items as $item) {
+            $itemKey = $item[$key];
+            $byKeys[$itemKey] = $byKeys[$itemKey] ?? $item;
+        }
+
+        return $byKeys;
     }
 
     public static function groupBy(array $items, string $key): array
