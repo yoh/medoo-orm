@@ -38,7 +38,9 @@ class Collection
         return $this->toEntityArray();
     }
 
-    /** @return array<T> */
+    /** 
+     * @return array<T> 
+     */
     public function toEntityArray(): array
     {
         foreach ($this->relations as &$collection) {
@@ -65,7 +67,7 @@ class Collection
     }
 
     /**
-     * @return Collection|Item
+     * @return Collection<T>|Item<T>
      */
     public function load(string $relation, array $where = []): self
     {
