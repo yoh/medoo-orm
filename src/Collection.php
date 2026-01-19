@@ -2,6 +2,9 @@
 
 namespace MedooOrm;
 
+/**
+ * @template T
+ */
 class Collection
 {
     // public string $table;
@@ -9,6 +12,7 @@ class Collection
     // public array $relations;
     // public Orm $orm;
     public $table;
+    /** @var array<T> */
     public $elements;
     public $relations;
     public $orm;
@@ -27,13 +31,14 @@ class Collection
     }
 
     /**
-     * @return Array|Object
+     * @return array<T>
      */
     public function toEntity()
     {
         return $this->toEntityArray();
     }
 
+    /** @return array<T> */
     public function toEntityArray(): array
     {
         foreach ($this->relations as &$collection) {
@@ -92,9 +97,9 @@ class Collection
 
     public static function pluck(array $items, string $key): array
     {
-        return array_unique(array_map(function ($item) use ($key) {
+        return array_filter(array_unique(array_map(function ($item) use ($key) {
             return is_object($item) ? $item->$key : $item[$key];
-        }, $items));
+        }, $items)));
     }
 
     public static function indexBy(array $items, string $key): array

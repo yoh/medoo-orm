@@ -58,9 +58,14 @@ abstract class Relation
 
     public function execute(string $relation, Collection $collection, array $where = [])
     {
-        $relateds = $collection->orm->select($this->table, $where + $this->where + [
-            "{$this->foreingKey}" => Collection::pluck($collection->elements, $this->nativeKey)
-        ]);
+        $relateds = new Collection($this->table, [], $collection->orm);
+
+        $ids = Collection::pluck($collection->elements, $this->nativeKey);
+        if (!empty($ids)) {
+            $relateds = $collection->orm->select($this->table, $where + $this->where + [
+                "{$this->foreingKey}" => $ids,
+            ]);
+        }
 
         if ($this instanceof OneToOneRelation || $this instanceof ManyToOneRelation) {
             $relatedsByIds = Collection::indexBy($relateds->toArray(), $this->foreingKey);
@@ -86,15 +91,9 @@ abstract class Relation
     }
 }
 
-class OneToOneRelation extends Relation
-{
-}
-class OneToManyRelation extends Relation
-{
-}
-class ManyToOneRelation extends Relation
-{
-}
+class OneToOneRelation extends Relation {}
+class OneToManyRelation extends Relation {}
+class ManyToOneRelation extends Relation {}
 class ManyToManyRelation extends Relation
 {
     // protected string $joinKey1;
@@ -126,16 +125,22 @@ class ManyToManyRelation extends Relation
 
     public function execute(string $relation, Collection $collection, array $where = [])
     {
-        $joins = $collection->orm->getConnectionForTable($this->joinTable)->select($this->joinTable, '*', [
-            "{$this->joinKey}" => Collection::pluck($collection->elements, $this->foreingKey)
-        ]);
+        $relateds = new Collection($this->table, [], $collection->orm);
 
-        if (!empty($joins)) {
-            $relateds = $collection->orm->select($this->table, $where + $this->where + [
-                "{$this->nativeKey}" => Collection::pluck($joins, $this->joinKey1)
+        $ids = Collection::pluck($collection->elements, $this->foreingKey);
+        if (!empty($ids)) {
+            $joins = $collection->orm->getConnectionForTable($this->joinTable)->select($this->joinTable, '*', [
+                "{$this->joinKey}" => $ids
             ]);
-        } else {
-            $relateds = new Collection($this->table, [], $collection->orm);
+
+            if (!empty($joins)) {
+                $joinedIds = Collection::pluck($joins, $this->joinKey1);
+                if (!empty($joinedIds)) {
+                    $relateds = $collection->orm->select($this->table, $where + $this->where + [
+                        "{$this->nativeKey}" => $joinedIds
+                    ]);
+                }
+            }
         }
 
         $relatedsByJoinKey1 = Collection::indexBy($relateds->elements, $this->nativeKey);

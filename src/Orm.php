@@ -13,6 +13,7 @@ class Orm
     private $config;
     private $schema;
     private $connections;
+    private $repositories;
     private $transactions;
     private $cache;
     private $autoSnapshot;
@@ -24,6 +25,7 @@ class Orm
         $this->config = $config;
         $this->schema = $schema;
         $this->connections = [];
+        $this->repositories = [];
         $this->transactions = [];
         $this->cache = [];
         $this->autoSnapshot = false;
@@ -39,7 +41,7 @@ class Orm
 
         $config = $this->config[$name] ?? false;
         if (!$config) {
-            throw new \DomainException("Undefined config for table '$name'");
+            throw new \DomainException("Undefined config for connection '$name'");
         }
 
         $conn = new MedooWrapper($config);
@@ -114,11 +116,17 @@ class Orm
         return $orderBy;
     }
 
-
     public function repo(string $table): AbstractRepository
     {
+        if ($this->repositories[$table] ?? false) {
+            return $this->repositories[$table];
+        }
+
         if ($repository = $this->schema[$table]['repository'] ?? false) {
-            return new $repository($this);
+            $repo = new $repository($this, $table);
+            $this->repositories[$table] = $repo;
+
+            return $repo;
         }
 
         throw new \DomainException("Undefined repository for table '$table'");
