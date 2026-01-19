@@ -4,7 +4,7 @@
     "description": "ORM based on catfan/medoo : retrieve data from database + hydrate Model + preload relations",
     "license": "MIT",
     "require": {
-        "php": ">=7.1",
+        "php": ">=7.4",
         "catfan/medoo": ">=1.7"
     },
     "require-dev": {
