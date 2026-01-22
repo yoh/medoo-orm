@@ -101,7 +101,9 @@ class Collection
     {
         return array_filter(array_unique(array_map(function ($item) use ($key) {
             return is_object($item) ? $item->$key : $item[$key];
-        }, $items)));
+        }, $items)), function ($data) {
+            return !(is_null($data) || $data === '');
+        });
     }
 
     public static function indexBy(array $items, string $key): array
